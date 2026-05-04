@@ -25,11 +25,17 @@ CREATE TABLE IF NOT EXISTS mcbl_editor_players (
   PRIMARY KEY (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 구단: 행 단위 (세션별 여러 구단)
 CREATE TABLE IF NOT EXISTS mcbl_editor_clubs (
-  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  payload JSON NOT NULL COMMENT '구단관리 저장 JSON',
+  idx INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '순번',
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '에디터 세션',
+  club_name VARCHAR(128) NOT NULL COMMENT '구단명',
+  color_code VARCHAR(32) NOT NULL DEFAULT '#FFFFFF' COMMENT '고유색코드',
+  emblem_image_url VARCHAR(768) NOT NULL DEFAULT '' COMMENT '구단 마크 이미지 URL',
   updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (session_id)
+  PRIMARY KEY (idx),
+  UNIQUE KEY uk_session_club (session_id, club_name),
+  KEY idx_club_session (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS mcbl_editor_records (

@@ -24,12 +24,6 @@ const JSON_MENU_DDL: string[] = [
   updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-  `CREATE TABLE IF NOT EXISTS mcbl_editor_clubs (
-  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  payload JSON NOT NULL COMMENT '구단관리 저장 JSON',
-  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (session_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS mcbl_editor_records (
   session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   payload JSON NOT NULL COMMENT '기록보기 저장 JSON',
@@ -58,6 +52,18 @@ const PITCHES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS mcbl_editor_pitches (
   KEY idx_session (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
 
+const CLUBS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS mcbl_editor_clubs (
+  idx INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '순번',
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '에디터 세션',
+  club_name VARCHAR(128) NOT NULL COMMENT '구단명',
+  color_code VARCHAR(32) NOT NULL DEFAULT '#FFFFFF' COMMENT '고유색코드',
+  emblem_image_url VARCHAR(768) NOT NULL DEFAULT '' COMMENT '구단 마크 이미지 URL',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (idx),
+  UNIQUE KEY uk_session_club (session_id, club_name),
+  KEY idx_club_session (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
+
 async function ensurePitchesTableStructure(pool: Pool): Promise<void> {
   const [cols] = await pool.query<RowDataPacket[]>(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
@@ -74,6 +80,22 @@ async function ensurePitchesTableStructure(pool: Pool): Promise<void> {
   }
 }
 
+async function ensureClubsTableStructure(pool: Pool): Promise<void> {
+  const [cols] = await pool.query<RowDataPacket[]>(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mcbl_editor_clubs'`
+  );
+  const names = new Set(cols.map((r) => r.COLUMN_NAME as string));
+  if (names.size === 0) {
+    await pool.execute(CLUBS_TABLE_SQL);
+    return;
+  }
+  if (names.has("payload") || !names.has("club_name")) {
+    await pool.execute("DROP TABLE IF EXISTS mcbl_editor_clubs");
+    await pool.execute(CLUBS_TABLE_SQL);
+  }
+}
+
 export async function ensureEditorSchema(): Promise<void> {
   if (globalForDb.mcblEditorSchemaReady) return;
   const pool = getPool();
@@ -81,6 +103,7 @@ export async function ensureEditorSchema(): Promise<void> {
     await pool.execute(ddl);
   }
   await ensurePitchesTableStructure(pool);
+  await ensureClubsTableStructure(pool);
   globalForDb.mcblEditorSchemaReady = true;
 }
 
@@ -167,9 +190,58 @@ async function savePitchesForSession(sessionId: string, body: Record<string, unk
   }
 }
 
+export type ClubInput = {
+  idx?: number | null;
+  club_name: string;
+  color_code: string;
+  emblem_image_url: string;
+};
+
+function parseClubList(body: Record<string, unknown>): ClubInput[] {
+  const raw = body.clubs;
+  if (!Array.isArray(raw)) {
+    throw new Error("구단 저장에는 clubs 배열이 필요합니다.");
+  }
+  const out: ClubInput[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const o = item as Record<string, unknown>;
+    const name = typeof o.club_name === "string" ? o.club_name.trim() : "";
+    if (!name || name.length > 128) {
+      throw new Error("구단명(club_name)은 1~128자 문자열이어야 합니다.");
+    }
+    const color =
+      typeof o.color_code === "string" && o.color_code.trim().length > 0
+        ? o.color_code.trim().slice(0, 32)
+        : "#FFFFFF";
+    const url =
+      typeof o.emblem_image_url === "string" ? o.emblem_image_url.trim().slice(0, 768) : "";
+    out.push({
+      idx: typeof o.idx === "number" ? o.idx : null,
+      club_name: name,
+      color_code: color,
+      emblem_image_url: url,
+    });
+  }
+  return out;
+}
+
+async function saveClubsForSession(sessionId: string, body: Record<string, unknown>): Promise<void> {
+  const list = parseClubList(body);
+  const pool = getPool();
+  await pool.execute("DELETE FROM mcbl_editor_clubs WHERE session_id = ?", [sessionId]);
+  for (const c of list) {
+    await pool.execute(
+      `INSERT INTO mcbl_editor_clubs (session_id, club_name, color_code, emblem_image_url)
+       VALUES (?, ?, ?, ?)`,
+      [sessionId, c.club_name, c.color_code, c.emblem_image_url]
+    );
+  }
+}
+
 export async function upsertMenuPayload(sessionId: string, menu: MenuKey, slice: unknown): Promise<void> {
-  if (menu === "pitches") {
-    throw new Error("구종은 JSON 테이블이 아닙니다.");
+  if (menu === "pitches" || menu === "clubs") {
+    throw new Error("구종·구단은 JSON 테이블이 아닙니다.");
   }
   await ensureEditorSchema();
   const table = MENU_TABLES[menu];
@@ -188,6 +260,10 @@ export async function saveEditorPost(sessionId: string, body: Record<string, unk
   const menu = assertMenuKey(selection?.sectionId);
   if (menu === "pitches") {
     await savePitchesForSession(sessionId, body);
+    return menu;
+  }
+  if (menu === "clubs") {
+    await saveClubsForSession(sessionId, body);
     return menu;
   }
   const slice = {
@@ -210,6 +286,14 @@ type PitchDbRow = RowDataPacket & {
   movement_lr: string | number;
   drop_ud: string | number;
   enabled: number | boolean;
+  updated_at: Date;
+};
+
+type ClubDbRow = RowDataPacket & {
+  idx: number;
+  club_name: string;
+  color_code: string;
+  emblem_image_url: string;
   updated_at: Date;
 };
 
@@ -250,8 +334,27 @@ export async function loadMergedSession(sessionId: string): Promise<{ body: stri
     }
   }
 
+  const [clubRows] = await pool.query<ClubDbRow[]>(
+    `SELECT idx, club_name, color_code, emblem_image_url, updated_at
+     FROM mcbl_editor_clubs WHERE session_id = ? ORDER BY idx`,
+    [sessionId]
+  );
+  if (clubRows.length === 0) {
+    menus.clubs = null;
+  } else {
+    menus.clubs = clubRows.map((r) => ({
+      idx: r.idx,
+      club_name: r.club_name,
+      color_code: r.color_code,
+      emblem_image_url: r.emblem_image_url,
+    }));
+    for (const r of clubRows) {
+      considerLatest(r.updated_at, latestMs, savedAtIso);
+    }
+  }
+
   for (const key of Object.keys(MENU_TABLES) as MenuKey[]) {
-    if (key === "pitches") continue;
+    if (key === "pitches" || key === "clubs") continue;
     const table = MENU_TABLES[key];
     const [rows] = await pool.query<MenuRow[]>(
       `SELECT payload, updated_at FROM \`${table}\` WHERE session_id = ? LIMIT 1`,

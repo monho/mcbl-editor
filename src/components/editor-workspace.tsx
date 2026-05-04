@@ -64,6 +64,14 @@ type EditorPitchRow = {
   enabled: boolean;
 };
 
+type EditorClubRow = {
+  rowType: "club";
+  idx: number | null;
+  club_name: string;
+  color_code: string;
+  emblem_image_url: string;
+};
+
 type EditorKvRow = {
   rowType: "kv";
   key: string;
@@ -72,7 +80,7 @@ type EditorKvRow = {
   context: string;
 };
 
-type EditorTableRow = EditorPitchRow | EditorKvRow;
+type EditorTableRow = EditorPitchRow | EditorClubRow | EditorKvRow;
 
 function rowsForSelection(sel: Selection | null): EditorTableRow[] {
   if (!sel) {
@@ -135,7 +143,22 @@ function rowsForSelection(sel: Selection | null): EditorTableRow[] {
         },
       ];
     case "clubs":
-      return [];
+      return [
+        {
+          rowType: "club",
+          idx: null,
+          club_name: "MCBL 베어스",
+          color_code: "#1e3a5f",
+          emblem_image_url: "https://example.com/emblems/bears.png",
+        },
+        {
+          rowType: "club",
+          idx: null,
+          club_name: "한강 돌핀스",
+          color_code: "#0d9488",
+          emblem_image_url: "",
+        },
+      ];
     case "records":
       return [
         {
@@ -281,6 +304,15 @@ export function EditorWorkspace({
           movement_lr,
           drop_ud,
           enabled,
+        }));
+    } else if (selection?.sectionId === "clubs") {
+      payload.clubs = (tableRows as EditorTableRow[])
+        .filter((r): r is EditorClubRow => r.rowType === "club")
+        .map(({ club_name, color_code, emblem_image_url, idx }) => ({
+          ...(idx != null ? { idx } : {}),
+          club_name,
+          color_code,
+          emblem_image_url,
         }));
     } else {
       payload.rows = (tableRows as EditorTableRow[])
@@ -525,6 +557,43 @@ export function EditorWorkspace({
                             <span className="text-zinc-300">{row.drop_ud}</span>
                             <span style={{ color: row.enabled ? C.accent : C.muted }}>
                               {row.enabled ? "사용" : "미사용"}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                ) : selection?.sectionId === "clubs" ? (
+                  <div className="overflow-x-auto rounded-lg border" style={{ borderColor: C.border }}>
+                    <div
+                      className="grid min-w-[720px] grid-cols-[52px_minmax(8rem,1fr)_100px_minmax(10rem,1.5fr)] gap-2 border-b px-3 py-2 text-[11px] font-bold tracking-wide text-zinc-500"
+                      style={{ borderColor: C.border, backgroundColor: C.sidebar }}
+                    >
+                      <span>idx</span>
+                      <span>구단명</span>
+                      <span>색상코드</span>
+                      <span>마크 URL</span>
+                    </div>
+                    <ul className="min-w-[720px]">
+                      {(tableRows as EditorClubRow[])
+                        .filter((r) => r.rowType === "club")
+                        .map((row) => (
+                          <li
+                            key={`${row.club_name}-${row.idx ?? "new"}`}
+                            className="grid grid-cols-[52px_minmax(8rem,1fr)_100px_minmax(10rem,1.5fr)] gap-2 border-b px-3 py-2.5 text-sm last:border-b-0"
+                            style={{ borderColor: C.border, backgroundColor: C.row }}
+                          >
+                            <span className="font-mono text-zinc-400">{row.idx ?? "—"}</span>
+                            <span className="truncate font-medium text-white">{row.club_name}</span>
+                            <span className="flex items-center gap-2 font-mono text-xs text-zinc-200">
+                              <span
+                                className="h-4 w-4 shrink-0 rounded border border-zinc-600"
+                                style={{ backgroundColor: row.color_code }}
+                                title={row.color_code}
+                              />
+                              {row.color_code}
+                            </span>
+                            <span className="min-w-0 truncate text-zinc-400" title={row.emblem_image_url}>
+                              {row.emblem_image_url || "—"}
                             </span>
                           </li>
                         ))}
