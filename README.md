@@ -39,3 +39,8 @@ vercel
 
 - `vercel.json`의 `regions`는 서버리스 함수 실행 리전입니다(예: `icn1` 서울).
 - 커스텀 도메인은 Vercel 프로젝트 **Settings → Domains**에서 `editor.mcbl.kr` 등을 연결하면 됩니다.
+
+### 웹 저장 → `/mcbl save`
+
+- 에디터 **저장**은 `POST /api/sync/<세션>` 으로 JSON을 올리고, 서버에서 `/mcbl save <세션>` 이 `GET` 으로 같은 URL에서 받습니다.
+- Vercel 서버리스는 **인메모리 Map** 이라 인스턴스마다 비어 있을 수 있습니다. 운영에서는 같은 프로세스에서 `next start` 하거나, 이후 Redis·DB 등에 저장소를 바꾸는 것을 권장합니다.

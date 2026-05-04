@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 /** LP 웹 에디터와 유사한 다크 팔레트 */
 const C = {
@@ -162,6 +162,51 @@ export function EditorWorkspace({
     setOpen((o) => ({ ...o, [id]: !o[id] }));
   };
 
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [savePosting, setSavePosting] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [copyDone, setCopyDone] = useState(false);
+
+  const saveCommand = `/mcbl save ${sessionId}`;
+
+  const openSaveModal = useCallback(async () => {
+    setSaveError(null);
+    setCopyDone(false);
+    setSaveOpen(true);
+    setSavePosting(true);
+    const payload = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      session: sessionId,
+      selection,
+      rows: tableRows,
+    };
+    try {
+      const res = await fetch(`/api/sync/${encodeURIComponent(sessionId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        setSaveError(t || `HTTP ${res.status}`);
+      }
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavePosting(false);
+    }
+  }, [sessionId, selection, tableRows]);
+
+  const copySaveCommand = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(saveCommand);
+      setCopyDone(true);
+    } catch {
+      setCopyDone(false);
+    }
+  }, [saveCommand]);
+
   return (
     <div
       className="mcbl-editor-root flex h-screen min-h-0 flex-col font-sans text-[15px] leading-normal text-zinc-200"
@@ -183,12 +228,14 @@ export function EditorWorkspace({
             {sessionId}
           </code>
         </div>
-        <span
-          className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
-          style={{ backgroundColor: `${C.accent}22`, color: C.accent }}
+        <button
+          type="button"
+          onClick={openSaveModal}
+          className="shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition hover:opacity-90"
+          style={{ backgroundColor: C.accent, color: "#111119" }}
         >
-          연동 예정
-        </span>
+          저장
+        </button>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -380,6 +427,72 @@ export function EditorWorkspace({
           )}
         </main>
       </div>
+
+      {saveOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.65)" }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="save-modal-title"
+        >
+          <div
+            className="w-full max-w-md rounded-xl border p-5 shadow-xl"
+            style={{ borderColor: C.border, backgroundColor: C.sidebar }}
+          >
+            <h2 id="save-modal-title" className="text-lg font-semibold text-white">
+              서버에 반영
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed" style={{ color: C.muted }}>
+              웹에 저장한 뒤, Minecraft 서버 채팅에서 아래 명령을 실행하면 서버가 데이터를
+              가져와 <code className="text-zinc-300">plugins/mcbl-core/editor-saves/</code> 에
+              저장합니다.
+            </p>
+            {savePosting && (
+              <p className="mt-3 text-sm" style={{ color: C.accent }}>
+                웹에 올리는 중…
+              </p>
+            )}
+            {saveError && (
+              <p className="mt-3 rounded border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+                {saveError}
+              </p>
+            )}
+            {!savePosting && !saveError && (
+              <p className="mt-3 text-sm text-emerald-400/90">웹 저장이 완료되었습니다.</p>
+            )}
+            <div className="mt-4 space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">
+                실행할 명령
+              </label>
+              <div
+                className="flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-sm"
+                style={{ borderColor: C.border, backgroundColor: C.bg, color: "#e4e4eb" }}
+              >
+                <span className="min-w-0 flex-1 break-all">{saveCommand}</span>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={copySaveCommand}
+                  className="rounded-md px-3 py-2 text-sm font-medium text-[#111119] transition hover:opacity-90"
+                  style={{ backgroundColor: C.accent }}
+                >
+                  {copyDone ? "복사됨" : "명령 복사"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSaveOpen(false)}
+                  className="rounded-md border px-3 py-2 text-sm text-zinc-300 transition hover:bg-white/5"
+                  style={{ borderColor: C.border }}
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
