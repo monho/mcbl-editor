@@ -3,11 +3,19 @@
 
 SET NAMES utf8mb4;
 
+-- 구종: 행 단위 (세션별 여러 구종)
 CREATE TABLE IF NOT EXISTS mcbl_editor_pitches (
+  idx INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '순번',
   session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '에디터 세션',
-  payload JSON NOT NULL COMMENT '구종설정 저장 JSON',
+  pitch_name VARCHAR(64) NOT NULL COMMENT '구종명',
+  speed_value DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '구속값',
+  movement_lr DECIMAL(10,4) NOT NULL DEFAULT 0.0000 COMMENT '좌우 무브먼트 값',
+  drop_ud DECIMAL(10,4) NOT NULL DEFAULT 0.0000 COMMENT '상하 낙차 값',
+  enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '사용여부 1=사용',
   updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (session_id)
+  PRIMARY KEY (idx),
+  UNIQUE KEY uk_session_pitch (session_id, pitch_name),
+  KEY idx_session (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS mcbl_editor_players (

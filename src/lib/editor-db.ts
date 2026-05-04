@@ -1,7 +1,7 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import mysql from "mysql2/promise";
 
-/** 에디터 사이드바 메뉴 ↔ MySQL 테이블 (각 메뉴별 1행/세션) */
+/** 에디터 사이드바 메뉴 ↔ MySQL 테이블 */
 export const MENU_TABLES = {
   pitches: "mcbl_editor_pitches",
   players: "mcbl_editor_players",
@@ -17,14 +17,7 @@ const globalForDb = globalThis as unknown as {
   mcblEditorSchemaReady: boolean | undefined;
 };
 
-/** scripts/init-editor-mysql.sql 과 동일. MySQL 사용자에게 CREATE 권한이 있어야 자동 생성됩니다. */
-const EDITOR_TABLE_DDL: string[] = [
-  `CREATE TABLE IF NOT EXISTS mcbl_editor_pitches (
-  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '에디터 세션',
-  payload JSON NOT NULL COMMENT '구종설정 저장 JSON',
-  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (session_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+const JSON_MENU_DDL: string[] = [
   `CREATE TABLE IF NOT EXISTS mcbl_editor_players (
   session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   payload JSON NOT NULL COMMENT '선수관리 저장 JSON',
@@ -51,12 +44,43 @@ const EDITOR_TABLE_DDL: string[] = [
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
+const PITCHES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS mcbl_editor_pitches (
+  idx INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '순번',
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '에디터 세션',
+  pitch_name VARCHAR(64) NOT NULL COMMENT '구종명',
+  speed_value DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT '구속값',
+  movement_lr DECIMAL(10,4) NOT NULL DEFAULT 0.0000 COMMENT '좌우 무브먼트 값',
+  drop_ud DECIMAL(10,4) NOT NULL DEFAULT 0.0000 COMMENT '상하 낙차 값',
+  enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '사용여부 1=사용',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (idx),
+  UNIQUE KEY uk_session_pitch (session_id, pitch_name),
+  KEY idx_session (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
+
+async function ensurePitchesTableStructure(pool: Pool): Promise<void> {
+  const [cols] = await pool.query<RowDataPacket[]>(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mcbl_editor_pitches'`
+  );
+  const names = new Set(cols.map((r) => r.COLUMN_NAME as string));
+  if (names.size === 0) {
+    await pool.execute(PITCHES_TABLE_SQL);
+    return;
+  }
+  if (names.has("payload") || !names.has("pitch_name")) {
+    await pool.execute("DROP TABLE IF EXISTS mcbl_editor_pitches");
+    await pool.execute(PITCHES_TABLE_SQL);
+  }
+}
+
 export async function ensureEditorSchema(): Promise<void> {
   if (globalForDb.mcblEditorSchemaReady) return;
   const pool = getPool();
-  for (const ddl of EDITOR_TABLE_DDL) {
+  for (const ddl of JSON_MENU_DDL) {
     await pool.execute(ddl);
   }
+  await ensurePitchesTableStructure(pool);
   globalForDb.mcblEditorSchemaReady = true;
 }
 
@@ -96,7 +120,57 @@ function assertMenuKey(section: unknown): MenuKey {
   return section as MenuKey;
 }
 
+export type PitchInput = {
+  idx?: number | null;
+  pitch_name: string;
+  speed_value: number;
+  movement_lr: number;
+  drop_ud: number;
+  enabled: boolean;
+};
+
+function parsePitchList(body: Record<string, unknown>): PitchInput[] {
+  const raw = body.pitches;
+  if (!Array.isArray(raw)) {
+    throw new Error("구종 저장에는 pitches 배열이 필요합니다.");
+  }
+  const out: PitchInput[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const o = item as Record<string, unknown>;
+    const name = typeof o.pitch_name === "string" ? o.pitch_name.trim() : "";
+    if (!name || name.length > 64) {
+      throw new Error("구종명(pitch_name)은 1~64자 문자열이어야 합니다.");
+    }
+    out.push({
+      idx: typeof o.idx === "number" ? o.idx : null,
+      pitch_name: name,
+      speed_value: Number(o.speed_value ?? 0),
+      movement_lr: Number(o.movement_lr ?? 0),
+      drop_ud: Number(o.drop_ud ?? 0),
+      enabled: Boolean(o.enabled),
+    });
+  }
+  return out;
+}
+
+async function savePitchesForSession(sessionId: string, body: Record<string, unknown>): Promise<void> {
+  const list = parsePitchList(body);
+  const pool = getPool();
+  await pool.execute("DELETE FROM mcbl_editor_pitches WHERE session_id = ?", [sessionId]);
+  for (const p of list) {
+    await pool.execute(
+      `INSERT INTO mcbl_editor_pitches (session_id, pitch_name, speed_value, movement_lr, drop_ud, enabled)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [sessionId, p.pitch_name, p.speed_value, p.movement_lr, p.drop_ud, p.enabled ? 1 : 0]
+    );
+  }
+}
+
 export async function upsertMenuPayload(sessionId: string, menu: MenuKey, slice: unknown): Promise<void> {
+  if (menu === "pitches") {
+    throw new Error("구종은 JSON 테이블이 아닙니다.");
+  }
   await ensureEditorSchema();
   const table = MENU_TABLES[menu];
   const pool = getPool();
@@ -109,8 +183,13 @@ export async function upsertMenuPayload(sessionId: string, menu: MenuKey, slice:
 }
 
 export async function saveEditorPost(sessionId: string, body: Record<string, unknown>): Promise<MenuKey> {
+  await ensureEditorSchema();
   const selection = body.selection as Record<string, unknown> | undefined;
   const menu = assertMenuKey(selection?.sectionId);
+  if (menu === "pitches") {
+    await savePitchesForSession(sessionId, body);
+    return menu;
+  }
   const slice = {
     version: body.version,
     savedAt: body.savedAt,
@@ -124,14 +203,55 @@ export async function saveEditorPost(sessionId: string, body: Record<string, unk
 
 type MenuRow = RowDataPacket & { payload: unknown; updated_at: Date };
 
+type PitchDbRow = RowDataPacket & {
+  idx: number;
+  pitch_name: string;
+  speed_value: string | number;
+  movement_lr: string | number;
+  drop_ud: string | number;
+  enabled: number | boolean;
+  updated_at: Date;
+};
+
+function considerLatest(t: Date | string, latestMs: { v: number }, savedAtIso: { v: string }): void {
+  const d = t instanceof Date ? t : new Date(t);
+  const ms = d.getTime();
+  if (ms >= latestMs.v) {
+    latestMs.v = ms;
+    savedAtIso.v = d.toISOString();
+  }
+}
+
 export async function loadMergedSession(sessionId: string): Promise<{ body: string; savedAt: string } | null> {
   await ensureEditorSchema();
   const pool = getPool();
   const menus: Record<string, unknown> = {};
-  let latestMs = 0;
-  let savedAtIso = new Date(0).toISOString();
+  const latestMs = { v: 0 };
+  const savedAtIso = { v: new Date(0).toISOString() };
+
+  const [pitchRows] = await pool.query<PitchDbRow[]>(
+    `SELECT idx, pitch_name, speed_value, movement_lr, drop_ud, enabled, updated_at
+     FROM mcbl_editor_pitches WHERE session_id = ? ORDER BY idx`,
+    [sessionId]
+  );
+  if (pitchRows.length === 0) {
+    menus.pitches = null;
+  } else {
+    menus.pitches = pitchRows.map((r) => ({
+      idx: r.idx,
+      pitch_name: r.pitch_name,
+      speed_value: Number(r.speed_value),
+      movement_lr: Number(r.movement_lr),
+      drop_ud: Number(r.drop_ud),
+      enabled: Boolean(r.enabled),
+    }));
+    for (const r of pitchRows) {
+      considerLatest(r.updated_at, latestMs, savedAtIso);
+    }
+  }
 
   for (const key of Object.keys(MENU_TABLES) as MenuKey[]) {
+    if (key === "pitches") continue;
     const table = MENU_TABLES[key];
     const [rows] = await pool.query<MenuRow[]>(
       `SELECT payload, updated_at FROM \`${table}\` WHERE session_id = ? LIMIT 1`,
@@ -151,11 +271,7 @@ export async function loadMergedSession(sessionId: string): Promise<{ body: stri
       }
     }
     menus[key] = payload;
-    const t = row.updated_at instanceof Date ? row.updated_at.getTime() : new Date(row.updated_at).getTime();
-    if (t >= latestMs) {
-      latestMs = t;
-      savedAtIso = (row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at)).toISOString();
-    }
+    considerLatest(row.updated_at, latestMs, savedAtIso);
   }
 
   if (Object.values(menus).every((v) => v == null)) {
@@ -165,8 +281,8 @@ export async function loadMergedSession(sessionId: string): Promise<{ body: stri
   const merged = {
     version: 2,
     session: sessionId,
-    savedAt: savedAtIso,
+    savedAt: savedAtIso.v,
     menus,
   };
-  return { body: JSON.stringify(merged), savedAt: savedAtIso };
+  return { body: JSON.stringify(merged), savedAt: savedAtIso.v };
 }

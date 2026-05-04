@@ -54,12 +54,31 @@ const SECTIONS: { id: SectionId; title: string; items: NavItem[] }[] = [
 
 type Selection = { sectionId: SectionId; itemId: string };
 
-type TableRow = { key: string; value: string; expiry: string; context: string };
+type EditorPitchRow = {
+  rowType: "pitch";
+  idx: number | null;
+  pitch_name: string;
+  speed_value: number;
+  movement_lr: number;
+  drop_ud: number;
+  enabled: boolean;
+};
 
-function rowsForSelection(sel: Selection | null): TableRow[] {
+type EditorKvRow = {
+  rowType: "kv";
+  key: string;
+  value: string;
+  expiry: string;
+  context: string;
+};
+
+type EditorTableRow = EditorPitchRow | EditorKvRow;
+
+function rowsForSelection(sel: Selection | null): EditorTableRow[] {
   if (!sel) {
     return [
       {
+        rowType: "kv",
         key: "mcbl.session",
         value: "true",
         expiry: "never",
@@ -70,32 +89,104 @@ function rowsForSelection(sel: Selection | null): TableRow[] {
   switch (sel.sectionId) {
     case "pitches":
       return [
-        { key: "pitch.fastball.enabled", value: "true", expiry: "never", context: "none" },
-        { key: "pitch.curve.spin", value: "1.0", expiry: "never", context: "none" },
-        { key: "pitch.changeup.label", value: "체인지업", expiry: "never", context: "none" },
+        {
+          rowType: "pitch",
+          idx: null,
+          pitch_name: "직구",
+          speed_value: 145,
+          movement_lr: 0.35,
+          drop_ud: -0.42,
+          enabled: true,
+        },
+        {
+          rowType: "pitch",
+          idx: null,
+          pitch_name: "슬라이더",
+          speed_value: 132,
+          movement_lr: -1.2,
+          drop_ud: -0.15,
+          enabled: true,
+        },
+        {
+          rowType: "pitch",
+          idx: null,
+          pitch_name: "체인지업",
+          speed_value: 118,
+          movement_lr: 0.8,
+          drop_ud: -1.05,
+          enabled: false,
+        },
       ];
     case "players":
       return [
-        { key: "player.register.auto", value: "false", expiry: "never", context: "none" },
-        { key: "player.uuid.lookup", value: "true", expiry: "never", context: "none" },
+        {
+          rowType: "kv",
+          key: "player.register.auto",
+          value: "false",
+          expiry: "never",
+          context: "none",
+        },
+        {
+          rowType: "kv",
+          key: "player.uuid.lookup",
+          value: "true",
+          expiry: "never",
+          context: "none",
+        },
       ];
     case "clubs":
       return [];
     case "records":
       return [
-        { key: "records.view.last", value: "true", expiry: "never", context: "none" },
+        {
+          rowType: "kv",
+          key: "records.view.last",
+          value: "true",
+          expiry: "never",
+          context: "none",
+        },
       ];
     case "misc":
       if (sel.itemId === "misc-advanced") {
         return [
-          { key: "sync.websocket.reconnect", value: "true", expiry: "never", context: "none" },
-          { key: "api.timeout_ms", value: "30000", expiry: "never", context: "none" },
+          {
+            rowType: "kv",
+            key: "sync.websocket.reconnect",
+            value: "true",
+            expiry: "never",
+            context: "none",
+          },
+          {
+            rowType: "kv",
+            key: "api.timeout_ms",
+            value: "30000",
+            expiry: "never",
+            context: "none",
+          },
         ];
       }
       return [
-        { key: "editor.locale", value: "ko_KR", expiry: "never", context: "none" },
-        { key: "sync.debug", value: "false", expiry: "never", context: "none" },
-        { key: "notifications.enabled", value: "true", expiry: "never", context: "none" },
+        {
+          rowType: "kv",
+          key: "editor.locale",
+          value: "ko_KR",
+          expiry: "never",
+          context: "none",
+        },
+        {
+          rowType: "kv",
+          key: "sync.debug",
+          value: "false",
+          expiry: "never",
+          context: "none",
+        },
+        {
+          rowType: "kv",
+          key: "notifications.enabled",
+          value: "true",
+          expiry: "never",
+          context: "none",
+        },
       ];
     default:
       return [];
@@ -174,13 +265,28 @@ export function EditorWorkspace({
     setCopyDone(false);
     setSaveOpen(true);
     setSavePosting(true);
-    const payload = {
+    const payload: Record<string, unknown> = {
       version: 1,
       savedAt: new Date().toISOString(),
       session: sessionId,
       selection,
-      rows: tableRows,
     };
+    if (selection?.sectionId === "pitches") {
+      payload.pitches = (tableRows as EditorTableRow[])
+        .filter((r): r is EditorPitchRow => r.rowType === "pitch")
+        .map(({ pitch_name, speed_value, movement_lr, drop_ud, enabled, idx }) => ({
+          ...(idx != null ? { idx } : {}),
+          pitch_name,
+          speed_value,
+          movement_lr,
+          drop_ud,
+          enabled,
+        }));
+    } else {
+      payload.rows = (tableRows as EditorTableRow[])
+        .filter((r): r is EditorKvRow => r.rowType === "kv")
+        .map(({ key, value, expiry, context }) => ({ key, value, expiry, context }));
+    }
     try {
       const res = await fetch(`/api/sync/${encodeURIComponent(sessionId)}`, {
         method: "POST",
@@ -390,6 +496,40 @@ export function EditorWorkspace({
                   >
                     표시할 행이 없습니다. 다른 항목을 선택하거나 서버 연동 후 데이터가 표시됩니다.
                   </p>
+                ) : selection?.sectionId === "pitches" ? (
+                  <div className="overflow-x-auto rounded-lg border" style={{ borderColor: C.border }}>
+                    <div
+                      className="grid min-w-[640px] grid-cols-[52px_minmax(8rem,1.2fr)_88px_88px_88px_72px] gap-2 border-b px-3 py-2 text-[11px] font-bold tracking-wide text-zinc-500"
+                      style={{ borderColor: C.border, backgroundColor: C.sidebar }}
+                    >
+                      <span>idx</span>
+                      <span>구종명</span>
+                      <span>구속값</span>
+                      <span>좌우</span>
+                      <span>낙차</span>
+                      <span>사용</span>
+                    </div>
+                    <ul className="min-w-[640px]">
+                      {(tableRows as EditorPitchRow[])
+                        .filter((r) => r.rowType === "pitch")
+                        .map((row) => (
+                          <li
+                            key={`${row.pitch_name}-${row.idx ?? "new"}`}
+                            className="grid grid-cols-[52px_minmax(8rem,1.2fr)_88px_88px_88px_72px] gap-2 border-b px-3 py-2.5 text-sm last:border-b-0"
+                            style={{ borderColor: C.border, backgroundColor: C.row }}
+                          >
+                            <span className="font-mono text-zinc-400">{row.idx ?? "—"}</span>
+                            <span className="truncate font-medium text-white">{row.pitch_name}</span>
+                            <span className="text-zinc-200">{row.speed_value}</span>
+                            <span className="text-zinc-300">{row.movement_lr}</span>
+                            <span className="text-zinc-300">{row.drop_ud}</span>
+                            <span style={{ color: row.enabled ? C.accent : C.muted }}>
+                              {row.enabled ? "사용" : "미사용"}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
                 ) : (
                   <div className="overflow-hidden rounded-lg border" style={{ borderColor: C.border }}>
                     <div
@@ -402,23 +542,25 @@ export function EditorWorkspace({
                       <span>컨텍스트</span>
                     </div>
                     <ul>
-                      {tableRows.map((row) => (
-                        <li
-                          key={row.key}
-                          className="grid grid-cols-[1fr_88px_100px_88px] gap-2 border-b px-3 py-2.5 text-sm last:border-b-0"
-                          style={{ borderColor: C.border, backgroundColor: C.row }}
-                        >
-                          <code className="truncate font-mono text-[13px] text-zinc-200">{row.key}</code>
-                          <span
-                            className="font-medium"
-                            style={{ color: row.value === "true" ? C.accent : "#e4e4eb" }}
+                      {(tableRows as EditorKvRow[])
+                        .filter((r) => r.rowType === "kv")
+                        .map((row) => (
+                          <li
+                            key={row.key}
+                            className="grid grid-cols-[1fr_88px_100px_88px] gap-2 border-b px-3 py-2.5 text-sm last:border-b-0"
+                            style={{ borderColor: C.border, backgroundColor: C.row }}
                           >
-                            {row.value}
-                          </span>
-                          <span style={{ color: C.muted }}>{row.expiry}</span>
-                          <span style={{ color: C.muted }}>{row.context}</span>
-                        </li>
-                      ))}
+                            <code className="truncate font-mono text-[13px] text-zinc-200">{row.key}</code>
+                            <span
+                              className="font-medium"
+                              style={{ color: row.value === "true" ? C.accent : "#e4e4eb" }}
+                            >
+                              {row.value}
+                            </span>
+                            <span style={{ color: C.muted }}>{row.expiry}</span>
+                            <span style={{ color: C.muted }}>{row.context}</span>
+                          </li>
+                        ))}
                     </ul>
                   </div>
                 )}
