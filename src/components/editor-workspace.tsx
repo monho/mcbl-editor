@@ -82,6 +82,54 @@ type EditorKvRow = {
 
 type EditorTableRow = EditorPitchRow | EditorClubRow | EditorKvRow;
 
+const INITIAL_PITCH_ROWS: EditorPitchRow[] = [
+  {
+    rowType: "pitch",
+    idx: null,
+    pitch_name: "직구",
+    speed_value: 145,
+    movement_lr: 0.35,
+    drop_ud: -0.42,
+    enabled: true,
+  },
+  {
+    rowType: "pitch",
+    idx: null,
+    pitch_name: "슬라이더",
+    speed_value: 132,
+    movement_lr: -1.2,
+    drop_ud: -0.15,
+    enabled: true,
+  },
+  {
+    rowType: "pitch",
+    idx: null,
+    pitch_name: "체인지업",
+    speed_value: 118,
+    movement_lr: 0.8,
+    drop_ud: -1.05,
+    enabled: false,
+  },
+];
+
+type PitchFormState = {
+  pitch_name: string;
+  speed_value: number;
+  movement_lr: number;
+  drop_ud: number;
+  enabled: boolean;
+};
+
+function emptyPitchForm(): PitchFormState {
+  return {
+    pitch_name: "",
+    speed_value: 0,
+    movement_lr: 0,
+    drop_ud: 0,
+    enabled: true,
+  };
+}
+
 function rowsForSelection(sel: Selection | null): EditorTableRow[] {
   if (!sel) {
     return [
@@ -96,35 +144,7 @@ function rowsForSelection(sel: Selection | null): EditorTableRow[] {
   }
   switch (sel.sectionId) {
     case "pitches":
-      return [
-        {
-          rowType: "pitch",
-          idx: null,
-          pitch_name: "직구",
-          speed_value: 145,
-          movement_lr: 0.35,
-          drop_ud: -0.42,
-          enabled: true,
-        },
-        {
-          rowType: "pitch",
-          idx: null,
-          pitch_name: "슬라이더",
-          speed_value: 132,
-          movement_lr: -1.2,
-          drop_ud: -0.15,
-          enabled: true,
-        },
-        {
-          rowType: "pitch",
-          idx: null,
-          pitch_name: "체인지업",
-          speed_value: 118,
-          movement_lr: 0.8,
-          drop_ud: -1.05,
-          enabled: false,
-        },
-      ];
+      return [];
     case "players":
       return [
         {
@@ -253,6 +273,11 @@ export function EditorWorkspace({
     itemId: "pitch-default",
   });
 
+  const [pitchList, setPitchList] = useState<EditorPitchRow[]>(() => [...INITIAL_PITCH_ROWS]);
+  const [addPitchOpen, setAddPitchOpen] = useState(false);
+  const [pitchForm, setPitchForm] = useState<PitchFormState>(emptyPitchForm);
+  const [pitchFormError, setPitchFormError] = useState<string | null>(null);
+
   const filteredSections = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return SECTIONS;
@@ -270,7 +295,10 @@ export function EditorWorkspace({
     return { sectionTitle: sec.title, itemLabel: item.label };
   }, [selection]);
 
-  const tableRows = useMemo(() => rowsForSelection(selection), [selection]);
+  const tableRows = useMemo(() => {
+    if (selection?.sectionId === "pitches") return pitchList;
+    return rowsForSelection(selection);
+  }, [selection, pitchList]);
 
   const toggleSection = (id: SectionId) => {
     setOpen((o) => ({ ...o, [id]: !o[id] }));
@@ -335,6 +363,37 @@ export function EditorWorkspace({
       setSavePosting(false);
     }
   }, [sessionId, selection, tableRows]);
+
+  const openAddPitchModal = useCallback(() => {
+    setPitchForm(emptyPitchForm());
+    setPitchFormError(null);
+    setAddPitchOpen(true);
+  }, []);
+
+  const submitAddPitch = useCallback(() => {
+    const name = pitchForm.pitch_name.trim();
+    if (!name) {
+      setPitchFormError("이름을 입력해 주세요.");
+      return;
+    }
+    if (name.length > 64) {
+      setPitchFormError("이름은 64자 이하여야 합니다.");
+      return;
+    }
+    const row: EditorPitchRow = {
+      rowType: "pitch",
+      idx: null,
+      pitch_name: name,
+      speed_value: Number.isFinite(pitchForm.speed_value) ? pitchForm.speed_value : 0,
+      movement_lr: Number.isFinite(pitchForm.movement_lr) ? pitchForm.movement_lr : 0,
+      drop_ud: Number.isFinite(pitchForm.drop_ud) ? pitchForm.drop_ud : 0,
+      enabled: pitchForm.enabled,
+    };
+    setPitchList((prev) => [...prev, row]);
+    setAddPitchOpen(false);
+    setPitchForm(emptyPitchForm());
+    setPitchFormError(null);
+  }, [pitchForm]);
 
   const copySaveCommand = useCallback(async () => {
     try {
@@ -518,9 +577,21 @@ export function EditorWorkspace({
               </div>
 
               <section>
-                <h2 className="mb-3 text-base font-semibold text-white">
-                  편집 항목 ({tableRows.length})
-                </h2>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-base font-semibold text-white">
+                    편집 항목 ({tableRows.length})
+                  </h2>
+                  {selection?.sectionId === "pitches" && (
+                    <button
+                      type="button"
+                      onClick={openAddPitchModal}
+                      className="shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition hover:opacity-90"
+                      style={{ backgroundColor: `${C.accent}22`, color: C.accent, border: `1px solid ${C.accent}55` }}
+                    >
+                      구종 추가
+                    </button>
+                  )}
+                </div>
                 {tableRows.length === 0 ? (
                   <p
                     className="rounded-lg border px-4 py-8 text-center text-sm"
@@ -638,6 +709,133 @@ export function EditorWorkspace({
           )}
         </main>
       </div>
+
+      {addPitchOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.65)" }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-pitch-title"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setAddPitchOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border p-5 shadow-xl"
+            style={{ borderColor: C.border, backgroundColor: C.sidebar }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="add-pitch-title" className="text-lg font-semibold text-white">
+              구종 추가
+            </h2>
+            <p className="mt-1 text-xs" style={{ color: C.muted }}>
+              테이블 컬럼과 동일하게 입력합니다. 사용 여부 기본값은「사용」입니다.
+            </p>
+            {pitchFormError && (
+              <p className="mt-3 rounded border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+                {pitchFormError}
+              </p>
+            )}
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-400" htmlFor="pf-name">
+                  이름
+                </label>
+                <input
+                  id="pf-name"
+                  type="text"
+                  maxLength={64}
+                  value={pitchForm.pitch_name}
+                  onChange={(e) => setPitchForm((f) => ({ ...f, pitch_name: e.target.value }))}
+                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                  style={{ borderColor: C.border, backgroundColor: C.bg, color: "#e4e4eb" }}
+                  placeholder="예: 커브"
+                  autoComplete="off"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-400" htmlFor="pf-speed">
+                  구속
+                </label>
+                <input
+                  id="pf-speed"
+                  type="number"
+                  step="0.01"
+                  value={pitchForm.speed_value}
+                  onChange={(e) =>
+                    setPitchForm((f) => ({ ...f, speed_value: parseFloat(e.target.value) || 0 }))
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                  style={{ borderColor: C.border, backgroundColor: C.bg, color: "#e4e4eb" }}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-400" htmlFor="pf-lr">
+                  좌우 무브먼트값
+                </label>
+                <input
+                  id="pf-lr"
+                  type="number"
+                  step="0.0001"
+                  value={pitchForm.movement_lr}
+                  onChange={(e) =>
+                    setPitchForm((f) => ({ ...f, movement_lr: parseFloat(e.target.value) || 0 }))
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                  style={{ borderColor: C.border, backgroundColor: C.bg, color: "#e4e4eb" }}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-400" htmlFor="pf-ud">
+                  상하 무브먼트값
+                </label>
+                <input
+                  id="pf-ud"
+                  type="number"
+                  step="0.0001"
+                  value={pitchForm.drop_ud}
+                  onChange={(e) =>
+                    setPitchForm((f) => ({ ...f, drop_ud: parseFloat(e.target.value) || 0 }))
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                  style={{ borderColor: C.border, backgroundColor: C.bg, color: "#e4e4eb" }}
+                />
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+                <input
+                  type="checkbox"
+                  checked={pitchForm.enabled}
+                  onChange={(e) => setPitchForm((f) => ({ ...f, enabled: e.target.checked }))}
+                  className="h-4 w-4 rounded border-zinc-600"
+                />
+                사용여부 (체크 시 사용)
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddPitchOpen(false);
+                  setPitchFormError(null);
+                }}
+                className="rounded-md border px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/5"
+                style={{ borderColor: C.border }}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={submitAddPitch}
+                className="rounded-md px-4 py-2 text-sm font-semibold text-[#111119] transition hover:opacity-90"
+                style={{ backgroundColor: C.accent }}
+              >
+                추가
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {saveOpen && (
         <div
