@@ -24,3 +24,10 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 세션 에디터: 뷰포트 전체 높이 */
+html:has(.mcbl-editor-root),
+body:has(.mcbl-editor-root) {
+  height: 100%;
+  overflow: hidden;
+}
