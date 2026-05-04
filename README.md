@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MCBL Editor
 
-## Getting Started
+Next.js 웹 에디터. **mcbl-core** 플러그인의 `/mcbl editor`가 여는 URL(`Editor.BaseUrl` + `/` + 10자 세션)과 맞춥니다.
 
-First, run the development server:
+## 로컬
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Vercel에 올리기
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. 이 폴더(`mcbl-editor`)를 GitHub 등에 푸시합니다.
+2. [Vercel](https://vercel.com) → **Add New…** → **Project** → 저장소를 import합니다.
+3. **Root Directory**: 모노레포가 아니면 비워 두고, 상위 레포 안에 이 앱만 있으면 `mcbl-editor`로 지정합니다.
+4. **Build & Output**: 기본값 그대로(`next build`, 출력 자동)면 됩니다.
+5. 배포가 끝나면 프로덕션 URL(예: `https://mcbl-editor.vercel.app`)을 복사합니다.
+6. Minecraft 서버 `plugins/mcbl-core/config.yml`에서:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```yaml
+   Editor:
+     BaseUrl: https://여기-배포-도메인
+   ```
 
-## Learn More
+   끝에 `/`는 넣지 않습니다. `/mcbl reload` 후 `/mcbl editor`로 링크를 다시 받으면 됩니다.
 
-To learn more about Next.js, take a look at the following resources:
+### CLI로 배포
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm i -g vercel
+cd mcbl-editor
+vercel
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+프로덕션 반영: `vercel --prod`
 
-## Deploy on Vercel
+### 참고
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `vercel.json`의 `regions`는 서버리스 함수 실행 리전입니다(예: `icn1` 서울).
+- 커스텀 도메인은 Vercel 프로젝트 **Settings → Domains**에서 `editor.mcbl.kr` 등을 연결하면 됩니다.
