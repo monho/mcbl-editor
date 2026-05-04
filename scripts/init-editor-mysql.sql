@@ -1,0 +1,39 @@
+-- MySQL 8 · utf8mb4
+-- DB는 연결 시 DATABASE_NAME(예: monho2)으로 선택된 뒤 실행하세요.
+
+SET NAMES utf8mb4;
+
+CREATE TABLE IF NOT EXISTS mcbl_editor_pitches (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '에디터 세션',
+  payload JSON NOT NULL COMMENT '구종설정 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mcbl_editor_players (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  payload JSON NOT NULL COMMENT '선수관리 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mcbl_editor_clubs (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  payload JSON NOT NULL COMMENT '구단관리 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mcbl_editor_records (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  payload JSON NOT NULL COMMENT '기록보기 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mcbl_editor_misc (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  payload JSON NOT NULL COMMENT '그 외 설정 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

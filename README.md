@@ -40,7 +40,15 @@ vercel
 - `vercel.json`의 `regions`는 서버리스 함수 실행 리전입니다(예: `icn1` 서울).
 - 커스텀 도메인은 Vercel 프로젝트 **Settings → Domains**에서 `editor.mcbl.kr` 등을 연결하면 됩니다.
 
+### MySQL 8 (메뉴별 테이블)
+
+1. DB에 스키마 적용: `scripts/init-editor-mysql.sql` 을 해당 DB(예: `monho2`)에 실행합니다.  
+   메뉴별 테이블: `mcbl_editor_pitches`, `mcbl_editor_players`, `mcbl_editor_clubs`, `mcbl_editor_records`, `mcbl_editor_misc` (utf8mb4).
+2. `.env.example` 을 참고해 **로컬은 `.env.local`**, Vercel은 **Settings → Environment Variables**에 `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` 를 넣습니다.  
+   **비밀번호는 Git에 커밋하지 마세요.** 이미 유출됐다면 DB 비밀번호를 즉시 바꾸세요.
+3. Vercel → MySQL 방화벽: 호스팅에서 **Vercel IP 허용**이 어렵다면 MySQL을 VPN/내부망만 열고, 에디터 API는 **같은 서버에서 `next start`** 로 두는 방식도 고려할 수 있습니다.
+
 ### 웹 저장 → `/mcbl save`
 
-- 에디터 **저장**은 `POST /api/sync/<세션>` 으로 JSON을 올리고, 서버에서 `/mcbl save <세션>` 이 `GET` 으로 같은 URL에서 받습니다.
-- Vercel 서버리스는 **인메모리 Map** 이라 인스턴스마다 비어 있을 수 있습니다. 운영에서는 같은 프로세스에서 `next start` 하거나, 이후 Redis·DB 등에 저장소를 바꾸는 것을 권장합니다.
+- **저장** 시 `POST /api/sync/<세션>` 이 `selection.sectionId` 에 해당하는 **메뉴 테이블 한 줄**에 upsert 합니다.
+- `/mcbl save <세션>` 의 `GET` 은 위 다섯 테이블을 읽어 `{ version: 2, session, savedAt, menus: { pitches|null, … } }` 형태의 JSON 한 덩어리로 돌려줍니다 (플러그인은 그대로 파일로 저장).
