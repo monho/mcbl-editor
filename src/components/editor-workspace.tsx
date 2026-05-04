@@ -228,7 +228,7 @@ export function EditorWorkspace({
                             <button
                               type="button"
                               onClick={() => setSelection({ sectionId: sec.id, itemId: item.id })}
-                              className={`flex w-full items-center gap-2 rounded-md py-1.5 pl-2 pr-2 text-left text-sm transition hover:bg-[#35354a] ${
+                              className={`flex w-full items-center rounded-md py-1.5 pl-2 pr-2 text-left text-sm transition hover:bg-[#35354a] ${
                                 sel ? "border-l-2" : "border-l-2 border-transparent"
                               }`}
                               style={{
@@ -237,13 +237,6 @@ export function EditorWorkspace({
                                 borderLeftColor: sel ? C.accent : "transparent",
                               }}
                             >
-                              <span
-                                className="h-8 w-8 shrink-0 rounded border"
-                                style={{
-                                  borderColor: C.border,
-                                  backgroundColor: C.bg,
-                                }}
-                              />
                               <span className="min-w-0 truncate">{item.label}</span>
                             </button>
                           </li>
