@@ -12,7 +12,53 @@ export const MENU_TABLES = {
 
 export type MenuKey = keyof typeof MENU_TABLES;
 
-const globalForDb = globalThis as unknown as { mcblMysqlPool: Pool | undefined };
+const globalForDb = globalThis as unknown as {
+  mcblMysqlPool: Pool | undefined;
+  mcblEditorSchemaReady: boolean | undefined;
+};
+
+/** scripts/init-editor-mysql.sql 과 동일. MySQL 사용자에게 CREATE 권한이 있어야 자동 생성됩니다. */
+const EDITOR_TABLE_DDL: string[] = [
+  `CREATE TABLE IF NOT EXISTS mcbl_editor_pitches (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '에디터 세션',
+  payload JSON NOT NULL COMMENT '구종설정 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS mcbl_editor_players (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  payload JSON NOT NULL COMMENT '선수관리 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS mcbl_editor_clubs (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  payload JSON NOT NULL COMMENT '구단관리 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS mcbl_editor_records (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  payload JSON NOT NULL COMMENT '기록보기 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS mcbl_editor_misc (
+  session_id CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  payload JSON NOT NULL COMMENT '그 외 설정 저장 JSON',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+];
+
+export async function ensureEditorSchema(): Promise<void> {
+  if (globalForDb.mcblEditorSchemaReady) return;
+  const pool = getPool();
+  for (const ddl of EDITOR_TABLE_DDL) {
+    await pool.execute(ddl);
+  }
+  globalForDb.mcblEditorSchemaReady = true;
+}
 
 export function isDbConfigured(): boolean {
   return Boolean(
@@ -51,6 +97,7 @@ function assertMenuKey(section: unknown): MenuKey {
 }
 
 export async function upsertMenuPayload(sessionId: string, menu: MenuKey, slice: unknown): Promise<void> {
+  await ensureEditorSchema();
   const table = MENU_TABLES[menu];
   const pool = getPool();
   const json = JSON.stringify(slice);
@@ -78,6 +125,7 @@ export async function saveEditorPost(sessionId: string, body: Record<string, unk
 type MenuRow = RowDataPacket & { payload: unknown; updated_at: Date };
 
 export async function loadMergedSession(sessionId: string): Promise<{ body: string; savedAt: string } | null> {
+  await ensureEditorSchema();
   const pool = getPool();
   const menus: Record<string, unknown> = {};
   let latestMs = 0;
