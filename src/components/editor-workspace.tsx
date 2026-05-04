@@ -14,7 +14,7 @@ const C = {
   border: "#2a2a36",
 } as const;
 
-type SectionId = "pitches" | "players" | "clubs" | "records";
+type SectionId = "pitches" | "players" | "clubs" | "records" | "misc";
 
 type NavItem = { id: string; label: string };
 
@@ -41,6 +41,14 @@ const SECTIONS: { id: SectionId; title: string; items: NavItem[] }[] = [
     id: "records",
     title: "기록보기",
     items: [{ id: "records-game", label: "경기 기록" }],
+  },
+  {
+    id: "misc",
+    title: "그 외 설정",
+    items: [
+      { id: "misc-general", label: "일반" },
+      { id: "misc-advanced", label: "고급" },
+    ],
   },
 ];
 
@@ -77,6 +85,18 @@ function rowsForSelection(sel: Selection | null): TableRow[] {
       return [
         { key: "records.view.last", value: "true", expiry: "never", context: "none" },
       ];
+    case "misc":
+      if (sel.itemId === "misc-advanced") {
+        return [
+          { key: "sync.websocket.reconnect", value: "true", expiry: "never", context: "none" },
+          { key: "api.timeout_ms", value: "30000", expiry: "never", context: "none" },
+        ];
+      }
+      return [
+        { key: "editor.locale", value: "ko_KR", expiry: "never", context: "none" },
+        { key: "sync.debug", value: "false", expiry: "never", context: "none" },
+        { key: "notifications.enabled", value: "true", expiry: "never", context: "none" },
+      ];
     default:
       return [];
   }
@@ -111,6 +131,7 @@ export function EditorWorkspace({
     players: true,
     clubs: true,
     records: true,
+    misc: true,
   });
   const [search, setSearch] = useState("");
   const [selection, setSelection] = useState<Selection | null>({
