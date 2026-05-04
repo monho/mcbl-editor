@@ -44,6 +44,10 @@ vercel
 
 1. **테이블 생성**: 배포 후 **저장** 또는 `/mcbl save` 연동 시, API가 `CREATE TABLE IF NOT EXISTS` 로 다섯 테이블을 자동 생성합니다(MySQL 사용자에게 **CREATE** 권한 필요).  
    수동으로 넣고 싶다면 `scripts/init-editor-mysql.sql` 을 실행해도 됩니다.  
+   **예전 JSON 형태 등 구 스키마가 이미 있을 때** 전부 최신 정의로 바꾸려면 백업 후 아래를 실행하세요(해당 `mcbl_editor_*` 테이블 데이터는 삭제됩니다).
+   ```bash
+   mysql -h HOST -u USER -p DATABASE < scripts/migrate-editor-to-latest.sql
+   ```
    테이블: **`mcbl_editor_pitches`**(구종 행: `idx`, `session_id`, `pitch_name`, `speed_value`, `movement_lr`, `drop_ud`, `enabled`), **`mcbl_editor_clubs`**(구단 행: `idx`, `session_id`, `club_name`, `color_code`, `emblem_image_url`), 그 외 메뉴는 JSON 1행/세션 (`mcbl_editor_players` 등, utf8mb4).
 2. `.env.example` 을 참고해 **로컬은 `.env.local`**, Vercel은 **Settings → Environment Variables**에 `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` 를 넣습니다.  
    **비밀번호는 Git에 커밋하지 마세요.** 이미 유출됐다면 DB 비밀번호를 즉시 바꾸세요.
