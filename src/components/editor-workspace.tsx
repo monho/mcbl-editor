@@ -82,36 +82,6 @@ type EditorKvRow = {
 
 type EditorTableRow = EditorPitchRow | EditorClubRow | EditorKvRow;
 
-const INITIAL_PITCH_ROWS: EditorPitchRow[] = [
-  {
-    rowType: "pitch",
-    idx: null,
-    pitch_name: "직구",
-    speed_value: 145,
-    movement_lr: 0.35,
-    drop_ud: -0.42,
-    enabled: true,
-  },
-  {
-    rowType: "pitch",
-    idx: null,
-    pitch_name: "슬라이더",
-    speed_value: 132,
-    movement_lr: -1.2,
-    drop_ud: -0.15,
-    enabled: true,
-  },
-  {
-    rowType: "pitch",
-    idx: null,
-    pitch_name: "체인지업",
-    speed_value: 118,
-    movement_lr: 0.8,
-    drop_ud: -1.05,
-    enabled: false,
-  },
-];
-
 type PitchFormState = {
   pitch_name: string;
   speed_value: number;
@@ -273,7 +243,7 @@ export function EditorWorkspace({
     itemId: "pitch-default",
   });
 
-  const [pitchList, setPitchList] = useState<EditorPitchRow[]>(() => [...INITIAL_PITCH_ROWS]);
+  const [pitchList, setPitchList] = useState<EditorPitchRow[]>([]);
   const [addPitchOpen, setAddPitchOpen] = useState(false);
   const [pitchForm, setPitchForm] = useState<PitchFormState>(emptyPitchForm);
   const [pitchFormError, setPitchFormError] = useState<string | null>(null);
